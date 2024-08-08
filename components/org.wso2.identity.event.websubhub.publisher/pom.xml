@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2024, WSO2 LLC. (http://www.wso2.com).
+  ~
+  ~ WSO2 LLC. licenses this file to you under the Apache License,
+  ~ Version 2.0 (the "License"); you may not use this file except
+  ~ in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~ http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing,
+  ~ software distributed under the License is distributed on an
+  ~ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  ~ KIND, either express or implied.  See the License for the
+  ~ specific language governing permissions and limitations
+  ~ under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>identity-event-publishers</artifactId>
+        <groupId>org.wso2.identity.event.publishers</groupId>
+        <version>1.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>org.wso2.identity.event.websubhub.publisher</artifactId>
+    <modelVersion>4.0.0</modelVersion>
+    <packaging>bundle</packaging>
+    <name>WebSub Hub Adapter Module</name>
+    <description>Adapter to integrate with WebSub Hub</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.wso2.carbon</groupId>
+            <artifactId>org.wso2.carbon.core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.application.authentication.framework</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.org.apache.httpcomponents</groupId>
+            <artifactId>httpasyncclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.json-simple.wso2</groupId>
+            <artifactId>json-simple</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.identity.event.publishers</groupId>
+            <artifactId>org.wso2.identity.event.common.publisher</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.central.log.mgt</artifactId>
+        </dependency>
+
+        <!--Test dependencies-->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.minidev</groupId>
+            <artifactId>json-smart</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                        <Bundle-Name>${project.artifactId}</Bundle-Name>
+                        <Private-Package>
+                            org.wso2.identity.event.websubhub.publisher.internal,
+                        </Private-Package>
+                        <Export-Package>
+                            !org.wso2.identity.event.websubhub.publisher.internal,
+                            org.wso2.identity.event.websubhub.publisher.*
+                        </Export-Package>
+                        <Import-Package>
+                            org.apache.commons.lang; version="${commons-lang.wso2.osgi.version.range}",
+                            org.apache.commons.logging; version="${org.apache.commons.logging.range}",
+                            org.apache.http; version="${httpasyncclient.version.range}",
+                            org.apache.http.impl.nio.conn; version="${httpasyncclient.version.range}",
+                            org.apache.http.impl.nio.reactor; version="${httpasyncclient.version.range}",
+                            org.apache.http.impl.nio.client; version="${httpasyncclient.version.range}",
+                            org.apache.http.impl.client; version="${httpasyncclient.version.range}",
+                            org.apache.http.nio.conn; version="${httpasyncclient.version.range}",
+                            org.apache.http.nio.reactor; version="${httpasyncclient.version.range}",
+                            org.apache.http.concurrent; version="${httpasyncclient.version.range}",
+                            org.apache.http.client.methods; version="${httpasyncclient.version.range}",
+                            org.apache.http.entity; version="${httpasyncclient.version.range}",
+                            org.apache.http.client.config; version="${httpasyncclient.version.range}",
+                            org.apache.http.conn.ssl; version="${httpasyncclient.version.range}",
+                            org.apache.http.util; version="${httpasyncclient.version.range}",
+                            org.apache.http.ssl; version="${httpasyncclient.version.range}",
+                            org.osgi.framework; version="${osgi.framework.imp.pkg.version.range}",
+                            org.osgi.service.component; version="${osgi.service.component.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.application.authentication.framework.exception;
+                            version="${carbon.identity.framework.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.core.util;
+                            version="${carbon.identity.framework.imp.pkg.version.range}",
+                            org.json.simple.parser; version="${com.googlecode.json-simple.wso2.version.range}",
+                            org.wso2.identity.event.common.publisher;
+                            version="${identity.outbound.adapter.version.range}",
+                            org.wso2.identity.event.common.publisher.exception;
+                            version="${identity.outbound.adapter.version.range}",
+                            org.apache.http.client.utils; version="${httpclient.httpcomponents.wso2.version.range}",
+                            org.wso2.identity.event.common.publisher.model;
+                            version="${identity.outbound.adapter.version.range}",
+                            com.nimbusds.jose.*; version="${nimbusds.osgi.version.range}",
+                            org.wso2.carbon.identity.event; version="${carbon.identity.framework.imp.pkg.version.range}",
+                            org.json.simple; version="${com.googlecode.json-simple.wso2.version.range}",
+                            org.slf4j; version="${org.slf4j.imp.pkg.version.range}",
+                            org.wso2.carbon.identity.central.log.mgt.utils; version="${carbon.identity.framework.imp.pkg.version.range}",
+                            org.wso2.carbon.utils; version="${carbon.kernel.package.import.version.range}",
+                        </Import-Package>
+                    </instructions>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
