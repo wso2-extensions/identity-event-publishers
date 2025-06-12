@@ -18,31 +18,23 @@
 
 package org.wso2.identity.event.common.publisher.model;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.wso2.identity.event.common.publisher.model.common.Subject;
-
 import java.util.Map;
 
 /**
  * Model class for Security Event Token Payload.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class SecurityEventTokenPayload {
 
-    private final String iss;
-    private final String jti;
-    private final long iat;
-    private final String aud;
-    private final String txn;
-    private final String rci;
+    protected final String iss;
+    protected final String jti;
+    protected final long iat;
+    protected final String aud;
+    protected final String txn;
+    protected final String rci;
 
-    @JsonProperty("sub_id")
-    private final Subject subId;
+    protected final Map<String, EventPayload> events;
 
-    private final Map<String, EventPayload> events;
-
-    private SecurityEventTokenPayload(Builder builder) {
+    protected SecurityEventTokenPayload(Builder builder) {
 
         this.iss = builder.iss;
         this.jti = builder.jti;
@@ -50,7 +42,6 @@ public class SecurityEventTokenPayload {
         this.aud = builder.aud;
         this.txn = builder.txn;
         this.rci = builder.rci;
-        this.subId = builder.subId;
         this.events = builder.events;
     }
 
@@ -89,11 +80,6 @@ public class SecurityEventTokenPayload {
         return events;
     }
 
-    public Subject getSubId() {
-
-        return subId;
-    }
-
     public static Builder builder() {
 
         return new Builder();
@@ -110,7 +96,6 @@ public class SecurityEventTokenPayload {
         private String aud;
         private String txn;
         private String rci;
-        private Subject subId;
         private Map<String, EventPayload> events;
 
         public Builder iss(String iss) {
@@ -152,12 +137,6 @@ public class SecurityEventTokenPayload {
         public Builder events(Map<String, EventPayload> events) {
 
             this.events = events;
-            return this;
-        }
-
-        public Builder subId(Subject subId) {
-
-            this.subId = subId;
             return this;
         }
 
