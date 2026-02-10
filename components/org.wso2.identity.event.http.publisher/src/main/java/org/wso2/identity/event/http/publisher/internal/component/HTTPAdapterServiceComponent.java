@@ -34,7 +34,6 @@ import org.wso2.carbon.identity.webhook.metadata.api.service.EventAdapterMetadat
 import org.wso2.identity.event.http.publisher.internal.config.HTTPAdapterConfiguration;
 import org.wso2.identity.event.http.publisher.internal.service.impl.HTTPEventPublisherImpl;
 
-import static org.wso2.carbon.identity.webhook.metadata.internal.constant.ErrorMessage.ERROR_CODE_ADAPTER_NOT_FOUND;
 import static org.wso2.identity.event.http.publisher.internal.constant.HTTPAdapterConstants.HTTP_ADAPTER_NAME;
 
 /**
@@ -46,6 +45,7 @@ import static org.wso2.identity.event.http.publisher.internal.constant.HTTPAdapt
 public class HTTPAdapterServiceComponent {
 
     private static final Log log = LogFactory.getLog(HTTPAdapterServiceComponent.class);
+    private static final String ERROR_CODE_ADAPTER_NOT_FOUND = "WEBHOOKMETA-66011";
 
     @Activate
     protected void activate(ComponentContext context) {
@@ -64,7 +64,7 @@ public class HTTPAdapterServiceComponent {
             }
         } catch (Throwable e) {
             if (e instanceof WebhookMetadataException &&
-                    ERROR_CODE_ADAPTER_NOT_FOUND.getCode().equals(((WebhookMetadataException) e).getErrorCode())) {
+                    ERROR_CODE_ADAPTER_NOT_FOUND.equals(((WebhookMetadataException) e).getErrorCode())) {
                 log.warn("HTTP adapter is not enabled. " +
                         "Please enable the HTTP adapter in the configuration file to use the HTTP event publisher.");
             } else {

@@ -40,7 +40,6 @@ import org.wso2.identity.event.websubhub.publisher.service.WebSubEventPublisherI
 import org.wso2.identity.event.websubhub.publisher.service.WebSubEventSubscriberImpl;
 import org.wso2.identity.event.websubhub.publisher.service.WebSubTopicManagerImpl;
 
-import static org.wso2.carbon.identity.webhook.metadata.internal.constant.ErrorMessage.ERROR_CODE_ADAPTER_NOT_FOUND;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.WEB_SUB_HUB_ADAPTER_NAME;
 
 /**
@@ -52,6 +51,7 @@ import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdap
 public class WebSubHubAdapterServiceComponent {
 
     private static final Log log = LogFactory.getLog(WebSubHubAdapterServiceComponent.class);
+    private static final String ERROR_CODE_ADAPTER_NOT_FOUND = "WEBHOOKMETA-66011";
 
     @Activate
     protected void activate(ComponentContext context) {
@@ -80,7 +80,7 @@ public class WebSubHubAdapterServiceComponent {
             }
         } catch (Throwable e) {
             if (e instanceof WebhookMetadataException &&
-                    ERROR_CODE_ADAPTER_NOT_FOUND.getCode().equals(((WebhookMetadataException) e).getErrorCode())) {
+                    ERROR_CODE_ADAPTER_NOT_FOUND.equals(((WebhookMetadataException) e).getErrorCode())) {
                 log.warn("websubhub adapter is not enabled. " +
                         "Please enable the websubhub adapter in the configuration file to use the websubhub event " +
                         "publisher.");
