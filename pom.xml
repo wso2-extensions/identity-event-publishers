@@ -178,7 +178,7 @@
             </dependency>
             <dependency>
                 <groupId>org.mockito</groupId>
-                <artifactId>mockito-inline</artifactId>
+                <artifactId>mockito-core</artifactId>
                 <version>${mockito.version}</version>
                 <scope>test</scope>
             </dependency>
@@ -276,7 +276,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <configuration>
-                    <source>${compiler-source.version}</source>
+                    <source>1.8</source>
                 </configuration>
                 <executions>
                     <execution>
@@ -432,18 +432,18 @@
 
         <carbon.p2.plugin.version>5.1.2</carbon.p2.plugin.version>
 
-        <maven.bundle.plugin.version>3.2.0</maven.bundle.plugin.version>
+        <maven.bundle.plugin.version>5.1.9</maven.bundle.plugin.version>
         <jacoco.version>0.8.2</jacoco.version>
         <maven.surefire.plugin.version>2.22.2</maven.surefire.plugin.version>
         <maven.findbug.plugin.version>3.0.5</maven.findbug.plugin.version>
         <maven.checkstyleplugin.version>3.1.0</maven.checkstyleplugin.version>
-        <maven.spotbugs.plugin.version>4.1.3</maven.spotbugs.plugin.version>
+        <maven.spotbugs.plugin.version>4.9.8.2</maven.spotbugs.plugin.version>
         <findsecbugs-plugin.version>1.10.1</findsecbugs-plugin.version>
         <maven.buildnumber.plugin.version>1.4</maven.buildnumber.plugin.version>
         <findbugs.annotations.version>1.3.2</findbugs.annotations.version>
 
-        <compiler-source.version>1.8</compiler-source.version>
-        <compiler-target.version>1.8</compiler-target.version>
+        <compiler-source.version>21</compiler-source.version>
+        <compiler-target.version>21</compiler-target.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <nimbusds.version>10.3.0.wso2v1</nimbusds.version>
@@ -451,8 +451,8 @@
         <json-smart.version>2.4.7</json-smart.version>
 
         <testng.version>6.9.10</testng.version>
-        <jacoco.version>0.8.6</jacoco.version>
-        <mockito.version>4.9.0</mockito.version>
+        <jacoco.version>0.8.12</jacoco.version>
+        <mockito.version>5.3.1</mockito.version>
 
         <org.slf4j.imp.pkg.version.range>[1.5.5,2.0.0)</org.slf4j.imp.pkg.version.range>
     </properties>

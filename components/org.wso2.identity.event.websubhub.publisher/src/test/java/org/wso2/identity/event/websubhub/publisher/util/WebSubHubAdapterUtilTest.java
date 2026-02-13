@@ -206,12 +206,13 @@ public class WebSubHubAdapterUtilTest {
             HttpPost post = mock(HttpPost.class);
             mockedLogUtils.when(
                             () -> WebSubHubCorrelationLogUtils
-                                    .triggerCorrelationLogForResponse(any(), anyLong(), any()))
+                                    .triggerCorrelationLogForResponse(any(), anyLong(), any(String[].class)))
                     .then(invocation -> null);
             WebSubHubAdapterUtil
                     .handleResponseCorrelationLog(post, 123L, "param1", "param2");
             mockedLogUtils.verify(
-                    () -> WebSubHubCorrelationLogUtils.triggerCorrelationLogForResponse(any(), anyLong(), any()),
+                    () -> WebSubHubCorrelationLogUtils
+                                    .triggerCorrelationLogForResponse(any(), anyLong(), any(String[].class)),
                     times(1));
         }
     }
