@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2024-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -31,10 +31,13 @@ import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
+import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherServerException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.carbon.identity.event.publisher.api.service.EventPublisher;
 import org.wso2.carbon.identity.topic.management.api.exception.TopicManagementException;
+import org.wso2.carbon.identity.webhook.management.api.exception.WebhookMgtException;
+import org.wso2.carbon.identity.webhook.management.api.model.Webhook;
 import org.wso2.carbon.utils.DiagnosticLog;
 import org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants;
 import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterException;
@@ -43,6 +46,7 @@ import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterData
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogUtils;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -52,6 +56,7 @@ import static org.wso2.carbon.identity.application.authentication.framework.util
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.TENANT_DOMAIN;
 import static org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage.ERROR_CODE_CONSTRUCTING_HUB_TOPIC;
 import static org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage.ERROR_CODE_TOPIC_EXISTS_CHECK;
+import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_ACTIVE_WEBHOOKS_RETRIEVAL;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.PUBLISH;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.buildURL;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.constructHubTopic;
@@ -118,13 +123,25 @@ public class WebSubEventPublisherImpl implements EventPublisher {
     @Override
     public boolean canHandleEvent(EventContext eventContext) throws EventPublisherException {
 
+        // Skip publishing when no active webhooks are subscribed to this event. A WebSubHub topic can exist without
+        // any subscribed webhook resources, in which case publishing would result in a wasted hub round-trip.
         try {
+            List<Webhook> activeWebhooks = WebSubHubAdapterDataHolder.getInstance().getWebhookManagementService()
+                    .getActiveWebhooks(eventContext.getEventProfileName(), eventContext.getEventProfileVersion(),
+                            eventContext.getEventUri(), eventContext.getTenantDomain());
+            if (activeWebhooks == null || activeWebhooks.isEmpty()) {
+                return false;
+            }
             return WebSubHubAdapterDataHolder.getInstance().getTopicManagementService()
                     .isTopicExists(eventContext.getEventUri(), eventContext.getEventProfileName(),
                             eventContext.getEventProfileVersion(), eventContext.getTenantDomain());
         } catch (TopicManagementException e) {
             throw handleServerException(ERROR_CODE_TOPIC_EXISTS_CHECK, e,
                     WebSubHubAdapterConstants.WEB_SUB_HUB_ADAPTER_NAME);
+        } catch (WebhookMgtException e) {
+            throw new EventPublisherServerException(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getCode(),
+                    ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getMessage(),
+                    String.format(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getDescription(), eventContext.getEventUri()), e);
         }
     }
 
