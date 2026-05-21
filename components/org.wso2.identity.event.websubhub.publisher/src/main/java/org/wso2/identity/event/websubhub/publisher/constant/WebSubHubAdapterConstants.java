@@ -135,7 +135,7 @@ public class WebSubHubAdapterConstants {
                 "Error constructing WebSubHub topic for channel: %s, event profile version: %s, " +
                         "tenant domain: %s."),
         ERROR_ACTIVE_WEBHOOKS_RETRIEVAL("65016", "Error while retrieving active webhooks.",
-                "Error while retrieving active webhooks for event URI: %s");
+                "Error while retrieving active webhooks for event URI: %s.");
 
         private static final String WEB_SUB_ADAPTER_ERROR_CODE_PREFIX = "WEBSUB-";
         private final String code;
