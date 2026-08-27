@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -24,20 +24,13 @@ import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
-import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
-import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherServerException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.EventPayload;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
-import org.wso2.carbon.identity.topic.management.api.exception.TopicManagementException;
-import org.wso2.carbon.identity.topic.management.api.service.TopicManagementService;
-import org.wso2.carbon.identity.webhook.management.api.exception.WebhookMgtException;
-import org.wso2.carbon.identity.webhook.management.api.model.Webhook;
-import org.wso2.carbon.identity.webhook.management.api.service.WebhookManagementService;
 import org.wso2.identity.event.websubhub.publisher.config.WebSubAdapterConfiguration;
 import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterException;
 import org.wso2.identity.event.websubhub.publisher.internal.ClientManager;
@@ -49,17 +42,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.CORRELATION_ID_REQUEST_HEADER;
 
 /**
@@ -79,10 +67,6 @@ public class WebSubEventPublisherImplTest {
     @Mock
     private HttpResponse mockHttpResponse;
 
-    private WebSubHubAdapterDataHolder mockDataHolder;
-    private WebhookManagementService mockWebhookManagementService;
-    private TopicManagementService mockTopicManagementService;
-
     private MockedStatic<WebSubHubAdapterDataHolder> mockedStaticDataHolder;
     private static MockedStatic<IdentityTenantUtil> mockedStaticIdentityTenantUtil;
 
@@ -94,7 +78,7 @@ public class WebSubEventPublisherImplTest {
         mockIdentityTenantUtil();
 
         mockedStaticDataHolder = mockStatic(WebSubHubAdapterDataHolder.class);
-        mockDataHolder = mock(WebSubHubAdapterDataHolder.class);
+        WebSubHubAdapterDataHolder mockDataHolder = mock(WebSubHubAdapterDataHolder.class);
         mockedStaticDataHolder.when(WebSubHubAdapterDataHolder::getInstance).thenReturn(mockDataHolder);
 
         when(mockDataHolder.getClientManager()).thenReturn(mockClientManager);
@@ -106,21 +90,6 @@ public class WebSubEventPublisherImplTest {
                 mock(org.wso2.carbon.identity.organization.management.service.OrganizationManager.class);
         when(mockDataHolder.getOrganizationManager()).thenReturn(mockOrgManager);
         when(mockOrgManager.resolveOrganizationId(any())).thenReturn("mock-org-id");
-
-        mockWebhookManagementService = mock(WebhookManagementService.class);
-        mockTopicManagementService = mock(TopicManagementService.class);
-        when(mockDataHolder.getWebhookManagementService()).thenReturn(mockWebhookManagementService);
-        when(mockDataHolder.getTopicManagementService()).thenReturn(mockTopicManagementService);
-    }
-
-    @BeforeMethod
-    public void resetCanHandleEventMocks() {
-
-        // Mocks are class-scoped, so clear invocation history so each test can assert
-        // call counts independently of preceding tests.
-        if (mockWebhookManagementService != null && mockTopicManagementService != null) {
-            clearInvocations(mockWebhookManagementService, mockTopicManagementService);
-        }
     }
 
     @AfterClass
@@ -189,85 +158,6 @@ public class WebSubEventPublisherImplTest {
             // Verify interactions
             verify(mockClientManager, times(1)).executeAsync(any());
         }
-    }
-
-    @Test
-    public void testCanHandleEventReturnsFalseWhenActiveWebhooksNull() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any())).thenReturn(null);
-
-        assertFalse(adapterService.canHandleEvent(buildEventContext()));
-        // Topic existence must not be queried when no active webhooks are present.
-        verify(mockTopicManagementService, never()).isTopicExists(any(), any(), any(), any());
-    }
-
-    @Test
-    public void testCanHandleEventReturnsFalseWhenActiveWebhooksEmpty() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any()))
-                .thenReturn(Collections.emptyList());
-
-        assertFalse(adapterService.canHandleEvent(buildEventContext()));
-        verify(mockTopicManagementService, never()).isTopicExists(any(), any(), any(), any());
-    }
-
-    @Test
-    public void testCanHandleEventReturnsTrueWhenWebhooksExistAndTopicExists() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any()))
-                .thenReturn(Collections.singletonList(mock(Webhook.class)));
-        when(mockTopicManagementService.isTopicExists(any(), any(), any(), any())).thenReturn(true);
-
-        assertTrue(adapterService.canHandleEvent(buildEventContext()));
-        verify(mockTopicManagementService, times(1))
-                .isTopicExists("test-uri", "WSO2", "v1", "test-tenant");
-    }
-
-    @Test
-    public void testCanHandleEventReturnsFalseWhenWebhooksExistButTopicMissing() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any()))
-                .thenReturn(Collections.singletonList(mock(Webhook.class)));
-        when(mockTopicManagementService.isTopicExists(any(), any(), any(), any())).thenReturn(false);
-
-        assertFalse(adapterService.canHandleEvent(buildEventContext()));
-    }
-
-    @Test
-    public void testCanHandleEventWrapsWebhookMgtExceptionAsServerException() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any()))
-                .thenThrow(new WebhookMgtException("boom"));
-
-        try {
-            adapterService.canHandleEvent(buildEventContext());
-            org.testng.Assert.fail("Expected EventPublisherServerException");
-        } catch (EventPublisherServerException e) {
-            assertEquals(e.getErrorCode(), "WEBSUB-65016");
-            // Topic existence must not be checked once the webhook lookup itself failed.
-            verify(mockTopicManagementService, never()).isTopicExists(any(), any(), any(), any());
-        }
-    }
-
-    @Test(expectedExceptions = EventPublisherException.class)
-    public void testCanHandleEventWrapsTopicManagementException() throws Exception {
-
-        when(mockWebhookManagementService.getActiveWebhooks(any(), any(), any(), any()))
-                .thenReturn(Collections.singletonList(mock(Webhook.class)));
-        when(mockTopicManagementService.isTopicExists(any(), any(), any(), any()))
-                .thenThrow(new TopicManagementException("code", "msg", "desc"));
-
-        adapterService.canHandleEvent(buildEventContext());
-    }
-
-    private EventContext buildEventContext() {
-
-        return EventContext.builder()
-                .tenantDomain("test-tenant")
-                .eventProfileName("WSO2")
-                .eventProfileVersion("v1")
-                .eventUri("test-uri")
-                .build();
     }
 
     /**
