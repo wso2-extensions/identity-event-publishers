@@ -113,16 +113,6 @@ public class HTTPEventPublisherImpl implements EventPublisher {
         final Map<String, String> copiedMDCSnapshot =
                 MDC.getCopyOfContextMap() != null ? MDC.getCopyOfContextMap() : emptyMap();
 
-        final String bodyJson;
-        try {
-            bodyJson = MAPPER.writeValueAsString(eventPayload);
-        } catch (JsonProcessingException e) {
-            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, null,
-                    HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
-                    "Failed to serialize HTTP adapter payload.");
-            return;
-        }
-
         final List<Webhook> activeWebhooks;
         try {
             activeWebhooks = HTTPAdapterDataHolder.getInstance().getWebhookManagementService()
@@ -145,6 +135,35 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                         HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
                         "Failed to decrypt secret for webhook: " + webhook.getName() +
                                 ". Event will not be published to the endpoint: " + url);
+                continue;
+            }
+
+            // A Security Event Token names its transmitter, and the transmitter is the organization
+            // that owns this webhook -- for an event raised in a descendant and delivered to an
+            // ancestor's webhook, that is the ancestor. The token is therefore stamped and
+            // serialised per recipient rather than once per occurrence.
+            //
+            // Only the issuer varies. jti identifies the occurrence and is left as the handler set
+            // it, so the copies delivered to two webhooks share one identifier and a consumer behind
+            // both can still recognise them as the same event. RFC 8417 requires jti to be unique
+            // within an event feed, which holds: each webhook is its own feed.
+            final String bodyJson;
+            try {
+                SecurityEventTokenPayload.Builder transmission = eventPayload.toBuilder();
+                // A webhook read from the database always records its owner. A webhook built in
+                // memory does not, and there the issuer the handler resolved is the best available
+                // answer, so it is left alone rather than guessed at.
+                if (webhook.getTenantId() != null) {
+                    transmission.iss(HTTPAdapterDataHolder.getInstance().getWebhookManagementService()
+                            .resolveTransmitterIssuer(webhook.getTenantId()));
+                }
+                bodyJson = MAPPER.writeValueAsString(transmission.build());
+            } catch (JsonProcessingException | WebhookMgtException e) {
+                log.error("Error while preparing the event for webhook: " + webhook.getId() +
+                        ". Event will not be published to the endpoint: " + url, e);
+                printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
+                        HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
+                        "Failed to serialize HTTP adapter payload for webhook: " + webhook.getName());
                 continue;
             }
 

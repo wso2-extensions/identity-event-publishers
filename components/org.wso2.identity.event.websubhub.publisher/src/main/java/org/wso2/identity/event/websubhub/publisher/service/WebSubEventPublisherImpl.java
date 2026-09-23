@@ -46,6 +46,7 @@ import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterData
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogUtils;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -86,16 +87,43 @@ public class WebSubEventPublisherImpl implements EventPublisher {
     public void publish(SecurityEventTokenPayload eventPayload, EventContext eventContext)
             throws EventPublisherException {
 
+        /*
+         An event raised in a sub organization is delivered to the webhooks of the organizations that subscribed
+         to it, which for an organization subscription is an ancestor organization rather than the one the event
+         was raised in. A hub topic belongs to the tenant it was registered in, so the event is published to the
+         topic of every organization that owns a webhook for it, and not to a topic of the organization the event
+         was raised in, which has none.
+
+         It is published once per organization rather than once per webhook: a topic serves every subscriber of
+         its channel, so the hub fans the event out to the webhooks of that organization itself.
+         */
+        for (Map.Entry<String, Integer> recipient : resolveRecipientTenants(eventContext).entrySet()) {
+            publishToTenant(eventPayload, eventContext, recipient.getKey(), recipient.getValue());
+        }
+    }
+
+    /**
+     * Publishes the event to the hub topic of one organization.
+     *
+     * @param eventPayload         Event to publish.
+     * @param eventContext         Context of the event, which names the organization it was raised in.
+     * @param topicTenantDomain    Tenant of the organization whose topic the event is published to.
+     * @param topicTenantId        Identifier of that tenant, or null when the owning tenant is not recorded.
+     * @throws EventPublisherException If the topic or the payload cannot be prepared.
+     */
+    private void publishToTenant(SecurityEventTokenPayload eventPayload, EventContext eventContext,
+                                 String topicTenantDomain, Integer topicTenantId) throws EventPublisherException {
+
         try {
             // Build immutable per-publish values.
             final String topic = constructHubTopic(
                     eventContext.getEventUri(),
                     eventContext.getEventProfileName(),
                     eventContext.getEventProfileVersion(),
-                    eventContext.getTenantDomain());
+                    topicTenantDomain);
 
             final String url = buildURL(topic, getWebSubBaseURL(), PUBLISH);
-            final String bodyJson = MAPPER.writeValueAsString(eventPayload);
+            final String bodyJson = MAPPER.writeValueAsString(stampTransmitter(eventPayload, topicTenantId));
 
             final String correlationId = getCorrelationID(eventPayload);
             final String tenantDomain = eventContext.getTenantDomain();
@@ -120,28 +148,112 @@ public class WebSubEventPublisherImpl implements EventPublisher {
         }
     }
 
-    @Override
-    public boolean canHandleEvent(EventContext eventContext) throws EventPublisherException {
+    /**
+     * Organizations the event is delivered to, as the tenant of each one and that tenant's identifier.
+     * <p>
+     * These are the organizations owning the webhooks active for the event, which for an organization
+     * subscription includes ancestors of the organization the event was raised in. Each organization appears
+     * once, however many of its webhooks subscribed.
+     *
+     * @param eventContext Context of the event.
+     * @return Tenant domain of each such organization, mapped to its tenant identifier. The identifier is null
+     * for a webhook that does not record its owner, where the organization the event was raised in is the best
+     * available answer.
+     * @throws EventPublisherException If the active webhooks cannot be retrieved.
+     */
+    private Map<String, Integer> resolveRecipientTenants(EventContext eventContext) throws EventPublisherException {
 
-        // Skip publishing when no active webhooks are subscribed to this event. A WebSubHub topic can exist without
-        // any subscribed webhook resources, in which case publishing would result in a wasted hub round-trip.
+        List<Webhook> activeWebhooks;
         try {
-            List<Webhook> activeWebhooks = WebSubHubAdapterDataHolder.getInstance().getWebhookManagementService()
-                    .getActiveWebhooks(eventContext.getEventProfileName(), eventContext.getEventProfileVersion(),
-                            eventContext.getEventUri(), eventContext.getTenantDomain());
-            if (activeWebhooks == null || activeWebhooks.isEmpty()) {
-                return false;
-            }
-            return WebSubHubAdapterDataHolder.getInstance().getTopicManagementService()
-                    .isTopicExists(eventContext.getEventUri(), eventContext.getEventProfileName(),
-                            eventContext.getEventProfileVersion(), eventContext.getTenantDomain());
-        } catch (TopicManagementException e) {
-            throw handleServerException(ERROR_CODE_TOPIC_EXISTS_CHECK, e,
-                    WebSubHubAdapterConstants.WEB_SUB_HUB_ADAPTER_NAME);
+            /*
+             The webhooks whose subscription to the channel is live rather than the active ones: a subscriber
+             adapter leaves a webhook partially active once the hub has accepted its subscriptions, and no later
+             state replaces that, so the active ones would never include a webhook of this adapter.
+             */
+            activeWebhooks = WebSubHubAdapterDataHolder.getInstance().getWebhookManagementService()
+                    .getWebhooksSubscribedToChannel(eventContext.getEventProfileName(),
+                            eventContext.getEventProfileVersion(), eventContext.getEventUri(),
+                            eventContext.getTenantDomain());
         } catch (WebhookMgtException e) {
             throw new EventPublisherServerException(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getCode(),
                     ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getMessage(),
                     String.format(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getDescription(), eventContext.getEventUri()), e);
+        }
+        if (activeWebhooks == null || activeWebhooks.isEmpty()) {
+            return emptyMap();
+        }
+        Map<String, Integer> recipientTenants = new LinkedHashMap<>();
+        for (Webhook webhook : activeWebhooks) {
+            if (webhook.getTenantId() == null) {
+                recipientTenants.putIfAbsent(eventContext.getTenantDomain(), null);
+                continue;
+            }
+            recipientTenants.putIfAbsent(IdentityTenantUtil.getTenantDomain(webhook.getTenantId()),
+                    webhook.getTenantId());
+        }
+        return recipientTenants;
+    }
+
+    /**
+     * The event as the organization it is delivered to transmits it.
+     * <p>
+     * A Security Event Token names its transmitter, and the transmitter is the organization owning the webhooks
+     * the topic serves. For an event raised in a descendant and delivered to an ancestor's topic that is the
+     * ancestor, not the organization the event was raised in.
+     * <p>
+     * Only the issuer varies. The identifier of the occurrence is left as the handler set it, so the copies
+     * delivered through two topics share one identifier and a consumer behind both can still recognise them as
+     * the same event.
+     *
+     * @param eventPayload  Event as the handler built it.
+     * @param topicTenantId Tenant of the organization the event is delivered to, or null when it is not known.
+     * @return The event to transmit.
+     */
+    private SecurityEventTokenPayload stampTransmitter(SecurityEventTokenPayload eventPayload, Integer topicTenantId) {
+
+        if (topicTenantId == null) {
+            // The issuer the handler resolved is the best available answer, so it is left alone.
+            return eventPayload;
+        }
+        try {
+            return eventPayload.toBuilder()
+                    .iss(WebSubHubAdapterDataHolder.getInstance().getWebhookManagementService()
+                            .resolveTransmitterIssuer(topicTenantId))
+                    .build();
+        } catch (WebhookMgtException e) {
+            log.debug("Error while resolving the transmitter issuer of tenant: " + topicTenantId +
+                    ". The issuer resolved by the handler is published instead.", e);
+            return eventPayload;
+        }
+    }
+
+    @Override
+    public boolean canHandleEvent(EventContext eventContext) throws EventPublisherException {
+
+        /*
+         Skip publishing when no active webhook is subscribed to this event. A WebSubHub topic can exist without
+         any subscribed webhook resource, in which case publishing would result in a wasted hub round-trip.
+
+         The topic is looked for in the tenant of each organization that owns such a webhook rather than in the
+         one the event was raised in: an event raised in a sub organization is delivered to an ancestor's topic,
+         and the organization it was raised in has no topic of its own.
+         */
+        Map<String, Integer> recipientTenants = resolveRecipientTenants(eventContext);
+        if (recipientTenants.isEmpty()) {
+            return false;
+        }
+        try {
+            for (String topicTenantDomain : recipientTenants.keySet()) {
+                if (WebSubHubAdapterDataHolder.getInstance().getTopicManagementService()
+                        .isTopicExists(eventContext.getEventUri(), eventContext.getEventProfileName(),
+                                eventContext.getEventProfileVersion(), topicTenantDomain)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (TopicManagementException e) {
+            throw handleServerException(ERROR_CODE_TOPIC_EXISTS_CHECK, e,
+                    WebSubHubAdapterConstants.WEB_SUB_HUB_ADAPTER_NAME);
         }
     }
 
