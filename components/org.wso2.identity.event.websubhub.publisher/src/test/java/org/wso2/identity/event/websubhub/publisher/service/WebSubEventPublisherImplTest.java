@@ -36,12 +36,18 @@ import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterExcept
 import org.wso2.identity.event.websubhub.publisher.internal.ClientManager;
 import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterDataHolder;
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil;
+import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogUtils;
 
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
@@ -72,6 +78,11 @@ public class WebSubEventPublisherImplTest {
 
     @BeforeClass
     public void setUp() throws Exception {
+
+        // The response callback starts a tenant flow, and PrivilegedCarbonContext fails to
+        // initialise without a carbon home.
+        System.setProperty("carbon.home",
+                Paths.get(System.getProperty("user.dir"), "src", "test", "resources").toString());
 
         mocks = MockitoAnnotations.openMocks(this);
         adapterService = spy(new WebSubEventPublisherImpl());
@@ -157,6 +168,78 @@ public class WebSubEventPublisherImplTest {
 
             // Verify interactions
             verify(mockClientManager, times(1)).executeAsync(any());
+        }
+    }
+
+    @Test
+    public void testClientErrorResponseIsReportedAndNotRetried()
+            throws EventPublisherException, WebSubAdapterException {
+
+        try (
+                MockedStatic<LoggerUtils> mockedLoggerUtils = mockStatic(LoggerUtils.class);
+                MockedStatic<WebSubHubAdapterUtil> mockedAdapterUtil = mockStatic(WebSubHubAdapterUtil.class)
+        ) {
+            mockedLoggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
+
+            mockedAdapterUtil.when(() -> WebSubHubAdapterUtil.constructHubTopic(any(), any(), any(), any()))
+                    .thenReturn("mock-topic");
+            mockedAdapterUtil.when(WebSubHubAdapterUtil::getWebSubBaseURL)
+                    .thenReturn("http://mock-websub-hub.com");
+            mockedAdapterUtil.when(
+                            () -> WebSubHubAdapterUtil
+                                    .printPublisherDiagnosticLog(any(), any(), any(), any(), any(), any()))
+                    .then(invocation -> null);
+
+            when(mockClientManager.getMaxRetries()).thenReturn(2);
+            clearInvocations(mockClientManager);
+
+            EventContext eventContext = EventContext.builder()
+                    .tenantDomain("test-tenant")
+                    .eventProfileName("WSO2")
+                    .eventUri("test-uri")
+                    .build();
+            SecurityEventTokenPayload payload = SecurityEventTokenPayload.builder()
+                    .iss("issuer")
+                    .jti("jti-token")
+                    .iat(System.currentTimeMillis())
+                    .aud("audience")
+                    .events(Collections.singletonMap("event1", new EventPayload() {
+                    }))
+                    .build();
+
+            org.apache.http.client.methods.HttpPost mockHttpPost = mock(org.apache.http.client.methods.HttpPost.class);
+            org.apache.http.Header mockHeader = mock(org.apache.http.Header.class);
+            when(mockHttpPost.getFirstHeader(CORRELATION_ID_REQUEST_HEADER)).thenReturn(mockHeader);
+            when(mockHeader.getValue()).thenReturn("mock-correlation-id");
+
+            org.apache.http.StatusLine clientErrorStatusLine = mock(org.apache.http.StatusLine.class);
+            when(clientErrorStatusLine.getStatusCode()).thenReturn(400);
+            when(clientErrorStatusLine.getReasonPhrase()).thenReturn("Bad Request");
+            HttpResponse clientErrorResponse = mock(HttpResponse.class);
+            when(clientErrorResponse.getStatusLine()).thenReturn(clientErrorStatusLine);
+            when(clientErrorResponse.getEntity()).thenReturn(null);
+
+            CompletableFuture<HttpResponse> future = CompletableFuture.completedFuture(clientErrorResponse);
+            when(mockClientManager.executeAsync(any())).thenReturn(future);
+            when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(mockHttpPost);
+            when(mockClientManager.getAsyncCallbackExecutor()).thenReturn((Executor) Runnable::run);
+
+            adapterService.publish(payload, eventContext);
+
+            try {
+                // The client error reaches the diagnostic log, which is where an operator sees it.
+                mockedAdapterUtil.verify(() -> WebSubHubAdapterUtil.printPublisherDiagnosticLog(any(), any(), any(),
+                        any(), any(), contains("client error")));
+                // And the correlation log, which the client error path previously never reached.
+                mockedAdapterUtil.verify(() -> WebSubHubAdapterUtil.handleResponseCorrelationLog(any(), anyLong(),
+                        eq(WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus()), eq("400"),
+                        eq("Bad Request")));
+                // A client error is final. The event is not republished.
+                verify(mockClientManager, times(1)).executeAsync(any());
+            } finally {
+                // This mock is shared across the class, so leave it clean for the other tests.
+                clearInvocations(mockClientManager);
+            }
         }
     }
 
