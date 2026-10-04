@@ -174,18 +174,31 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     if (status >= 200 && status < 300) {
                         handleAsyncResponse(eventProfileName, eventProfileUri, events, response, request,
                                 requestStartTime);
-                    } else if (status >= 300 && status < 400) {
+                    } else if (status >= 300 && status < 500) {
+                        // A redirection or a client error is not a server side failure. It is reported
+                        // through the diagnostic log and is not retried.
+                        String msg = status < 400 ?
+                                "WebSubHub endpoint returned a redirection. Status code: " + status :
+                                "WebSubHub endpoint returned a client error. Status code: " + status;
                         printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                DiagnosticLog.ResultStatus.FAILED,
-                                "WebSubHub endpoint returned a redirection. Status code: " + status);
-                        log.error("WebSubHub endpoint returned a redirection. Status code: " + status);
-                    } else if (status >= 400 && status < 500) {
-                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
-                                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                DiagnosticLog.ResultStatus.FAILED,
-                                "WebSubHub endpoint returned a client error. Status code: " + status);
-                        log.error("WebSubHub endpoint returned a client error. Status code: " + status);
+                                DiagnosticLog.ResultStatus.FAILED, msg);
+                        handleResponseCorrelationLog(request, requestStartTime,
+                                WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
+                                String.valueOf(status), response.getStatusLine().getReasonPhrase());
+                        if (log.isDebugEnabled()) {
+                            log.debug(msg);
+                            try {
+                                if (response.getEntity() != null) {
+                                    log.debug("Error response data: " + EntityUtils.toString(response.getEntity()));
+                                }
+                            } catch (IOException e) {
+                                log.debug("Error while reading WebSubHub response.", e);
+                            }
+                        }
+                        if (response.getEntity() != null) {
+                            EntityUtils.consumeQuietly(response.getEntity());
+                        }
                     } else {
                         String msg = "Received server error from websubhub endpoint. Status code: " + status;
                         boolean canRetry = retriesLeft > 0;
