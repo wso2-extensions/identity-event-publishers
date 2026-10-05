@@ -175,8 +175,10 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                         handleAsyncResponse(eventProfileName, eventProfileUri, events, response, request,
                                 requestStartTime);
                     } else if (status >= 300 && status < 500) {
-                        // A redirection or a client error is not a server side failure. It is reported
-                        // through the diagnostic log and is not retried.
+                        // The topic and the payload are built by this server, so a redirection or a
+                        // client error means the hub rejected a request this server produced.
+                        // Retrying would be rejected the same way, so the response body is the only
+                        // thing that explains it.
                         String msg = status < 400 ?
                                 "WebSubHub endpoint returned a redirection. Status code: " + status :
                                 "WebSubHub endpoint returned a client error. Status code: " + status;
@@ -186,19 +188,20 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                         handleResponseCorrelationLog(request, requestStartTime,
                                 WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
                                 String.valueOf(status), response.getStatusLine().getReasonPhrase());
-                        if (log.isDebugEnabled()) {
-                            log.debug(msg);
-                            try {
-                                if (response.getEntity() != null) {
-                                    log.debug("Error response data: " + EntityUtils.toString(response.getEntity()));
-                                }
-                            } catch (IOException e) {
-                                log.debug("Error while reading WebSubHub response.", e);
+                        String responseBody = "";
+                        try {
+                            if (response.getEntity() != null) {
+                                responseBody = EntityUtils.toString(response.getEntity());
+                            }
+                        } catch (IOException e) {
+                            log.debug("Error while reading WebSubHub response.", e);
+                        } finally {
+                            if (response.getEntity() != null) {
+                                EntityUtils.consumeQuietly(response.getEntity());
                             }
                         }
-                        if (response.getEntity() != null) {
-                            EntityUtils.consumeQuietly(response.getEntity());
-                        }
+                        log.error(msg + " Reason: " + response.getStatusLine().getReasonPhrase() +
+                                ", Response: " + responseBody);
                     } else {
                         String msg = "Received server error from websubhub endpoint. Status code: " + status;
                         boolean canRetry = retriesLeft > 0;
