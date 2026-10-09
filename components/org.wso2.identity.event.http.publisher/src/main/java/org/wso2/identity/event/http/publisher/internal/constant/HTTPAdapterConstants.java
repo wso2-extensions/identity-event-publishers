@@ -24,6 +24,7 @@ package org.wso2.identity.event.http.publisher.internal.constant;
 public class HTTPAdapterConstants {
 
     public static final String HTTP_ADAPTER_NAME = "httppublisher";
+    public static final String WSO2_EVENT_PROFILE = "WSO2";
 
     /**
      * HTTP Adapter related constants.

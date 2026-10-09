@@ -81,12 +81,18 @@ public class HTTPEventPublisherImpl implements EventPublisher {
     public void publish(SecurityEventTokenPayload eventPayload, EventContext eventContext)
             throws EventPublisherException {
 
+        if (!HTTPAdapterConstants.WSO2_EVENT_PROFILE.equals(eventContext.getEventProfileName())) {
+            return;
+        }
         makeAsyncAPICall(eventPayload, eventContext);
     }
 
     @Override
     public boolean canHandleEvent(EventContext eventContext) throws EventPublisherException {
 
+        if (!HTTPAdapterConstants.WSO2_EVENT_PROFILE.equals(eventContext.getEventProfileName())) {
+            return false;
+        }
         try {
             final List<Webhook> activeWebhooks = HTTPAdapterDataHolder.getInstance().getWebhookManagementService()
                     .getActiveWebhooks(eventContext.getEventProfileName(), eventContext.getEventProfileVersion(),
